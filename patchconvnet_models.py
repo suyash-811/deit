@@ -286,6 +286,7 @@ class PatchConvnet(nn.Module):
         depth_token_only: int = 1,
         mlp_ratio_clstk: float = 3.0,
         multiclass: bool = False,
+        return_attn_maps: bool = False #WIP
     ):
         super().__init__()
 
@@ -404,13 +405,13 @@ class PatchConvnet(nn.Module):
         B = x.shape[0]
         x = self.forward_features(x)
         if not self.multiclass:
-            x = self.head(x)
-            return x
+            out = self.head(x)
+            return out, x
         else:
             all_results = []
             for i in range(self.num_classes):
                 all_results.append(self.head[i](x[:, i]))
-            return torch.cat(all_results, dim=1).reshape(B, self.num_classes)
+            return torch.cat(all_results, dim=1).reshape(B, self.num_classes), x
 
 
 @register_model

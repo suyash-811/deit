@@ -67,7 +67,8 @@ class Learned_Aggregation_Layer(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, N, C = x.shape
-        q = self.q(x[:, 0]).unsqueeze(1).reshape(B, 1, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+        #q = self.q(x[:, 0]).unsqueeze(1).reshape(B, 1, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+        q = self.q(x).reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
         k = self.k(x).reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
 
         q = q * self.scale
@@ -78,11 +79,11 @@ class Learned_Aggregation_Layer(nn.Module):
         attn = attn.softmax(dim=-1)
         attn = self.attn_drop(attn)
 
-        x_cls = (attn @ v).transpose(1, 2).reshape(B, 1, C)
+        x_cls = (attn @ v).transpose(1, 2).reshape(B, N, C)
         x_cls = self.proj(x_cls)
         x_cls = self.proj_drop(x_cls)
 
-        return x_cls
+        return x_cls, attn
 
 
 class Learned_Aggregation_Layer_multi(nn.Module):
@@ -172,9 +173,10 @@ class Layer_scale_init_Block_only_token(nn.Module):
 
     def forward(self, x: torch.Tensor, x_cls: torch.Tensor) -> torch.Tensor:
         u = torch.cat((x_cls, x), dim=1)
-        x_cls = x_cls + self.drop_path(self.gamma_1 * self.attn(self.norm1(u)))
-        x_cls = x_cls + self.drop_path(self.gamma_2 * self.mlp(self.norm2(x_cls)))
-        return x_cls
+        intermediate, attn = self.attn(self.norm1(u))
+        u = u + self.drop_path(self.gamma_1 * intermediate)
+        u = u + self.drop_path(self.gamma_2 * self.mlp(self.norm2(u)))
+        return u, attn
 
 
 class Conv_blocks_se(nn.Module):
@@ -289,7 +291,7 @@ class PatchConvnet(nn.Module):
         return_attn_maps: bool = False #WIP
     ):
         super().__init__()
-
+        self.return_attn_maps = return_attn_maps
         self.multiclass = multiclass
         self.patch_size = patch_size
         self.num_classes = num_classes
@@ -352,6 +354,7 @@ class PatchConvnet(nn.Module):
         if not self.multiclass:
             self.head = nn.Linear(int(embed_dim), num_classes) if num_classes > 0 else nn.Identity()
         else:
+            # self.head = nn.Linear(int(embed_dim), num_classes)
             self.head = nn.ModuleList([nn.Linear(int(embed_dim), 1) for _ in range(num_classes)])
 
         self.rescale: float = 0.02
@@ -391,27 +394,44 @@ class PatchConvnet(nn.Module):
             x = blk(x)
 
         for i, blk in enumerate(self.blocks_token_only):
-            cls_tokens = blk(x, cls_tokens)
-        x = torch.cat((cls_tokens, x), dim=1)
+            x, attn = blk(x, cls_tokens)
+        #x = torch.cat((cls_tokens, x), dim=1)
 
         x = self.norm(x)
 
         if not self.multiclass:
-            return x[:, 0]
+            if self.return_attn_maps:
+                return x[:, 0], attn
+            else:
+                x[:,0]
         else:
-            return x[:, : self.num_classes].reshape(B, self.num_classes, -1)
+            if self.return_attn_maps:
+                return x[:, : self.num_classes].reshape(B, self.num_classes, -1), attn
+            else:
+                return x[:, : self.num_classes].reshape(B, self.num_classes, -1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B = x.shape[0]
-        x = self.forward_features(x)
+        if self.return_attn_maps:
+            x, attn = self.forward_features(x)
+        else:
+            x = self.forward_features(x)
+
         if not self.multiclass:
             out = self.head(x)
-            return out, x
+            if self.return_attn_maps:
+                return out, attn
+            else:
+                return out
         else:
             all_results = []
             for i in range(self.num_classes):
                 all_results.append(self.head[i](x[:, i]))
-            return torch.cat(all_results, dim=1).reshape(B, self.num_classes), x
+            if self.return_attn_maps:
+                return torch.cat(all_results, dim=1).reshape(B, self.num_classes), attn
+            else:
+                return torch.cat(all_results, dim=1).reshape(B, self.num_classes)
+
 
 
 @register_model

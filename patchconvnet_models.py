@@ -354,8 +354,8 @@ class PatchConvnet(nn.Module):
         if not self.multiclass:
             self.head = nn.Linear(int(embed_dim), num_classes) if num_classes > 0 else nn.Identity()
         else:
-            # self.head = nn.Linear(int(embed_dim), num_classes)
-            self.head = nn.ModuleList([nn.Linear(int(embed_dim), 1) for _ in range(num_classes)])
+            self.head = nn.Linear(int(embed_dim), num_classes)
+            # self.head = nn.ModuleList([nn.Linear(int(embed_dim), 1) for _ in range(num_classes)])
 
         self.rescale: float = 0.02
 
@@ -380,6 +380,9 @@ class PatchConvnet(nn.Module):
 
     def get_num_layers(self):
         return len(self.blocks)
+
+    def set_multilabel_head(self, num_classes):
+        self.head = nn.ModuleList([nn.Linear(int(self.num_features), 1) for _ in range(num_classes)])
 
     def reset_classifier(self, num_classes: int, global_pool: str = ''):
         self.num_classes = num_classes

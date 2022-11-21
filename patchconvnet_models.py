@@ -273,7 +273,7 @@ class PatchConvnet(nn.Module):
         drop_rate: float = 0.0,
         attn_drop_rate: float = 0.0,
         drop_path_rate: float = 0.0,
-        hybrid_backbone: Optional = None,
+        hybrid_backbone: Optional[str] = None,
         norm_layer=nn.LayerNorm,
         global_pool: Optional[str] = None,
         block_layers=Layer_scale_init_Block,
@@ -354,8 +354,8 @@ class PatchConvnet(nn.Module):
         if not self.multiclass:
             self.head = nn.Linear(int(embed_dim), num_classes) if num_classes > 0 else nn.Identity()
         else:
-            self.head = nn.Linear(int(embed_dim), num_classes)
-            # self.head = nn.ModuleList([nn.Linear(int(embed_dim), 1) for _ in range(num_classes)])
+            # self.head = nn.Linear(int(embed_dim), num_classes)
+            self.head = nn.ModuleList([nn.Linear(int(embed_dim), 1) for _ in range(num_classes)])
 
         self.rescale: float = 0.02
 

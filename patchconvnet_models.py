@@ -406,7 +406,7 @@ class PatchConvnet(nn.Module):
             if self.return_attn_maps:
                 return x[:, 0], attn
             else:
-                x[:,0]
+                return x[:,0]
         else:
             if self.return_attn_maps:
                 return x[:, : self.num_classes].reshape(B, self.num_classes, -1), attn
